@@ -1,0 +1,624 @@
+# %% [markdown]
+# # Surrogate Model Training Version 1.0
+# #### Train the same AI model architecture 25(#DoE) times and save the weights of the different model instances. 
+
+# %% [markdown]
+# This should be the column structure of the each parquet file of the 25 DoE files:
+# | time | x | y | z | Temp_K |
+
+# %% [markdown]
+# time, x, y, z -> Temp_K
+# where time, x, y, z are the model's input features (covariates) and Temp_K is the model's output predicted variable (dependent variable)
+
+# %% [markdown]
+# ## Trying a different Train Test split in this code
+
+# %% [markdown]
+# ### Imports
+
+# %%
+
+
+# %%
+
+import pandas as pd
+import polars as pl
+import os
+import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler 
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.model_selection import train_test_split
+from scipy.stats import pearsonr
+import csv
+import glob
+from pathlib import Path
+
+# %% [markdown]
+# ### Functions
+
+# %%
+def load_data_for_experiment_efficient(exp, data_dir='data/pre_processed/'):
+    """
+    Efficiently load data for a specific experiment using Polars.
+    
+    Args:
+        exp: Experiment identifier (e.g., "800_4")
+        data_dir: Directory containing the data files
+    
+    Returns:
+        X: Input features as numpy array
+        y: Target variable as numpy array
+    """
+    data_dir = os.path.abspath(data_dir)
+    print(f"Loading data from {data_dir} for experiment {exp}")
+    
+    # Look for parquet files first (more efficient)
+    parquet_file = os.path.join(data_dir, f"{exp}.parquet")
+    
+    if os.path.exists(parquet_file):
+        print(f"Loading parquet file: {exp}.parquet")
+        # Use Polars for fast parquet reading
+        df = pl.read_parquet(parquet_file)
+        
+        # Ensure required columns exist
+        required_cols = ['time', 'x', 'y', 'z', 'Temp_K']
+        available_cols = df.columns
+        
+        if not all(col in available_cols for col in required_cols):
+            missing_cols = [col for col in required_cols if col not in available_cols]
+            raise ValueError(f"Missing required columns {missing_cols} in {parquet_file}. Available: {available_cols}")
+        
+        # Select only required columns and convert to numpy (Polars is much faster)
+        X = df.select(['time', 'x', 'y', 'z']).to_numpy()
+        y = df.select(['Temp_K']).to_numpy()
+        
+        print(f"Loaded data shape: X={X.shape}, y={y.shape}")
+        return X, y
+    
+    else:
+        # Fallback to original method if parquet doesn't exist
+        files = [f for f in os.listdir(data_dir) if exp in f and f.endswith('.parquet')]
+        if not files:
+            raise FileNotFoundError(f"No parquet files found for experiment {exp} in {data_dir}")
+        
+        # Sort files by modification time and get the latest one
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(data_dir, x))) 
+        file_path = os.path.join(data_dir, files[-1])  
+        print(f"Loading data for experiment {exp}: {files[-1]}")
+        
+        # Use Polars for reading
+        df = pl.read_parquet(file_path)
+        
+        # Ensure correct columns exist
+        required_cols = ['time', 'x', 'y', 'z', 'Temp_K']
+        if not all(col in df.columns for col in required_cols):
+            raise ValueError(f"Missing required columns in {file_path}")
+        
+        X = df.select(['time', 'x', 'y', 'z']).to_numpy()
+        y = df.select(['Temp_K']).to_numpy()
+        
+        return X, y
+
+
+def downsample_3d_voxels(df, voxel_size=1e-6, spatial_cols=['x', 'y', 'z']):
+    """
+    Downsample dataframe by taking one sample per 3D voxel.
+    
+    Args:
+        df: Polars DataFrame with spatial coordinates
+        voxel_size: Size of each voxel dimension (default: 1e-6)
+        spatial_cols: Column names for spatial coordinates (default: ['x', 'y', 'z'])
+    
+    Returns:
+        Downsampled Polars DataFrame
+    """
+    print(f"Starting 3D voxel downsampling with voxel size: {voxel_size}")
+    print(f"Original data shape: {df.shape}")
+    
+    # Create voxel indices by discretizing spatial coordinates
+    df_with_voxels = df.with_columns([
+        (pl.col(spatial_cols[0]) / voxel_size).floor().cast(pl.Int64).alias("voxel_x"),
+        (pl.col(spatial_cols[1]) / voxel_size).floor().cast(pl.Int64).alias("voxel_y"),
+        (pl.col(spatial_cols[2]) / voxel_size).floor().cast(pl.Int64).alias("voxel_z")
+    ])
+    
+    # Group by voxel coordinates and take the first sample from each voxel
+    downsampled_df = (df_with_voxels
+                     .group_by(["voxel_x", "voxel_y", "voxel_z"])
+                     .first()
+                     .drop(["voxel_x", "voxel_y", "voxel_z"]))
+    
+    print(f"Downsampled data shape: {downsampled_df.shape}")
+    print(f"Reduction ratio: {df.shape[0] / downsampled_df.shape[0]:.2f}x")
+    
+    return downsampled_df
+
+
+def load_all_experiments_efficient(doe_str, data_dir='data/pre_processed/', use_lazy=True, apply_voxel_downsampling=False, voxel_size=1e-6):
+    """
+    Efficiently load all experiments at once using Polars lazy evaluation with optional 3D voxel downsampling.
+    This is much faster than loading files one by one.
+    
+    Args:
+        doe_str: List of experiment identifiers
+        data_dir: Directory containing the data files
+        use_lazy: Whether to use Polars lazy evaluation (recommended for large datasets)
+        apply_voxel_downsampling: Whether to apply 3D voxel downsampling (default: True)
+        voxel_size: Size of each voxel dimension for downsampling (default: 1e-6)
+    
+    Returns:
+        X_combined: Combined input features
+        y_combined: Combined target variables
+        experiment_labels: Labels indicating which experiment each sample belongs to
+    """
+    data_dir = os.path.abspath(data_dir)
+    print(f"Efficiently loading all experiments from {data_dir}")
+    print(f"Voxel downsampling: {'Enabled' if apply_voxel_downsampling else 'Disabled'}")
+    if apply_voxel_downsampling:
+        print(f"Voxel size: {voxel_size} x {voxel_size} x {voxel_size}")
+    
+    # Get all available parquet files
+    parquet_files = []
+    experiment_labels = []
+    
+    for exp in doe_str:
+        parquet_file = os.path.join(data_dir, f"{exp}.parquet")
+        if os.path.exists(parquet_file):
+            parquet_files.append(parquet_file)
+        else:
+            print(f"Warning: {exp}.parquet not found, skipping...")
+    
+    if not parquet_files:
+        raise FileNotFoundError(f"No parquet files found for experiments in {data_dir}")
+    
+    print(f"Found {len(parquet_files)} parquet files to load")
+    
+    if use_lazy:
+        # Use Polars lazy evaluation for maximum efficiency
+        print("Using Polars lazy evaluation for efficient loading...")
+        
+        # Create lazy frames for each file and add experiment label
+        lazy_frames = []
+        for i, file_path in enumerate(parquet_files):
+            exp_name = Path(file_path).stem  # Get filename without extension
+            
+            # Create lazy frame with experiment label
+            lazy_df = (pl.scan_parquet(file_path)
+                      .with_columns(pl.lit(exp_name).alias("experiment"))
+                      .select(['time', 'x', 'y', 'z', 'Temp_K', 'experiment']))
+            
+            lazy_frames.append(lazy_df)
+        
+        # Concatenate all lazy frames and collect (execute) once
+        print("Concatenating and executing lazy operations...")
+        combined_df = pl.concat(lazy_frames).collect()
+        
+    else:
+        # Eager loading (still faster than pandas)
+        print("Using Polars eager evaluation...")
+        dfs = []
+        
+        for file_path in parquet_files:
+            exp_name = Path(file_path).stem
+            df = (pl.read_parquet(file_path)
+                 .with_columns(pl.lit(exp_name).alias("experiment"))
+                 .select(['time', 'x', 'y', 'z', 'Temp_K', 'experiment']))
+            dfs.append(df)
+        
+        combined_df = pl.concat(dfs)
+    
+    print(f"Combined dataset shape (before downsampling): {combined_df.shape}")
+    
+    # Apply 3D voxel downsampling if requested
+    if apply_voxel_downsampling:
+        print("\n=== Applying 3D Voxel Downsampling ===")
+        
+        # Process each experiment separately to maintain experiment boundaries
+        downsampled_dfs = []
+        
+        for exp_name in combined_df.select('experiment').unique().to_pandas()['experiment'].tolist():
+            print(f"\nDownsampling experiment: {exp_name}")
+            exp_df = combined_df.filter(pl.col('experiment') == exp_name)
+            
+            # Apply voxel downsampling to this experiment
+            downsampled_exp_df = downsample_3d_voxels(exp_df, voxel_size=voxel_size)
+            downsampled_dfs.append(downsampled_exp_df)
+        
+        # Combine all downsampled experiments
+        combined_df = pl.concat(downsampled_dfs)
+        print(f"\n=== Final downsampled dataset shape: {combined_df.shape} ===")
+    
+    # Extract features, targets, and labels efficiently
+    X_combined = combined_df.select(['time', 'x', 'y', 'z']).to_numpy()
+    y_combined = combined_df.select(['Temp_K']).to_numpy()
+    experiment_labels = combined_df.select(['experiment']).to_pandas()['experiment'].tolist()
+    
+    print(f"Final shapes - X: {X_combined.shape}, y: {y_combined.shape}, labels: {len(experiment_labels)}")
+    
+    return X_combined, y_combined, experiment_labels
+
+
+def load_data_for_experiment(exp, data_dir='data/pre_processed/'):
+    """
+    Wrapper function to maintain compatibility with existing code.
+    Now uses the efficient Polars-based loader.
+    """
+    return load_data_for_experiment_efficient(exp, data_dir)
+
+# %%
+from sklearn.model_selection import train_test_split
+
+def split_random(X, y, test_fraction=0.1, val_fraction=0.2, random_state=42):
+    """
+    Random train / val / test split.
+
+    - First take `test_fraction` of all samples as test.
+    - Then split the remaining data into train and validation
+      with fraction `val_fraction`.
+
+    Returns:
+        X_train, X_val, X_test, y_train, y_val, y_test
+    """
+    # 1) Train+Val vs Test
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y,
+        test_size=test_fraction,
+        random_state=random_state,
+        shuffle=True,
+    )
+
+    # 2) Train vs Val on remaining data
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp,
+        test_size=val_fraction,
+        random_state=random_state,
+        shuffle=True,
+    )
+
+    print(f"Final splits - Train: {X_train.shape[0]}, "
+          f"Val: {X_val.shape[0]}, Test: {X_test.shape[0]}")
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+# %%
+def create_model(input_dim = 4, learning_rate=0.001):  #  input_dim is 4 for time, x, y, z
+   # Define a simple feedforward neural network
+
+    model = Sequential([         Dense(256, activation='relu', input_dim=input_dim),  # Input layer
+                        Dropout(0.2),               
+        Dense(256, activation='relu'), # Hidden layerayer
+        # Dropout(0.2),
+        Dense(128, activation='relu'), # Hidden layer
+        Dense(128, activation='relu'),  # Hidden layer
+        Dense(64, activation='relu'),  # Hidden layer
+        Dense(64, activation='relu'),  # Hidden layer
+        Dense(1)  # Output layer 
+    ])
+    optimizer = Adam(learning_rate=learning_rate) # Using Adam optimizer
+    model.compile(optimizer=optimizer, loss='mse') # Model compilation
+    return model  # return the model compiled
+
+# %%
+def evaluate_model(model, X_test, y_test, scaler_X, scaler_y, exp, dataset_type="test"):
+    """
+    Evaluate model performance on test data.
+    
+    Args:
+        model: Trained model
+        X_test: Test input features
+        y_test: Test target values
+        scaler_X: Fitted scaler for input features
+        scaler_y: Fitted scaler for target values
+        exp: Experiment identifier
+        dataset_type: Type of dataset being evaluated (for labeling)
+    """
+    # Scale the input features
+    X_scaled = scaler_X.transform(X_test)
+    y_pred_scaled = model.predict(X_scaled, verbose=0)
+    y_pred = scaler_y.inverse_transform(y_pred_scaled)
+
+    y_original = y_test.flatten()
+    y_pred = y_pred.flatten()
+
+    rmse = np.sqrt(mean_squared_error(y_original, y_pred))
+    mae = mean_absolute_error(y_original, y_pred)
+    r2 = r2_score(y_original, y_pred)
+    
+    corr, _ = pearsonr(y_original, y_pred)  # Pearson correlation coefficient
+
+    print(f"\n=== {dataset_type.title()} Evaluation Metrics for experiment {exp} ===")
+    print(f"RMSE: {rmse:.4f}")
+    print(f"MAE: {mae:.4f}")
+    print(f"R²: {r2:.4f}")
+    print(f"Pearson Correlation: {corr:.4f}")
+    
+    # Save metrics to CSV
+    os.makedirs('evaluation_results', exist_ok=True)
+    csv_file = f"evaluation_results/model_evaluation_metrics_{dataset_type}.csv"
+    
+    # Check if file exists to write header
+    file_exists = os.path.exists(csv_file)
+    
+    with open(csv_file, mode='a', newline='') as f:
+        writer = csv.writer(f)
+        if not file_exists:  # Write header only if file doesn't exist
+            writer.writerow(["Experiment", "RMSE", "MAE", "R2", "Pearson Correlation"])
+        writer.writerow([f"exp_{exp}", f"{rmse:.4f}", f"{mae:.4f}", f"{r2:.4f}", f"{corr:.4f}"])
+    
+    # Create predicted vs actual plot
+    plt.figure(figsize=(8, 6))
+    plt.scatter(y_original, y_pred, alpha=0.6, s=10)
+    plt.plot([y_original.min(), y_original.max()], [y_original.min(), y_original.max()], 'r--', lw=2)
+    plt.xlabel('Original Temperature (Kelvin)')
+    plt.ylabel('Predicted Temperature (Kelvin)')
+    plt.grid(True, alpha=0.3)
+    plt.title(f'Predicted vs Actual Temperature ({dataset_type.title()}) - {exp}')
+    
+    # Add R² to the plot
+    plt.text(0.05, 0.95, f'R² = {r2:.4f}', transform=plt.gca().transAxes, 
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    plot_dir = os.path.abspath('evaluation_plots')
+    os.makedirs(plot_dir, exist_ok=True)
+    plt.savefig(os.path.join(plot_dir, f'predicted_vs_actual_{dataset_type}_{exp}.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return {"RMSE": rmse, "MAE": mae, "R2": r2, "Pearson_Correlation": corr}
+
+# %%
+def train_and_save_model(model, X_train, X_val, X_test, y_train, y_val, y_test, exp, training_parameters):
+    """
+    Train the model with train/validation splits and evaluate on test set.
+    
+    Args:
+        model: Compiled model
+        X_train, X_val, X_test: Input features for train, validation, and test sets
+        y_train, y_val, y_test: Target values for train, validation, and test sets
+        exp: Experiment identifier
+        training_parameters: Dictionary containing training hyperparameters
+    
+    Returns:
+        model: Trained model
+        history: Training history
+        test_metrics: Test evaluation metrics
+    """
+    epochs = training_parameters['epochs']
+    batch_size = training_parameters['batch_size']
+    
+    # Initialize scalers
+    scaler_X = StandardScaler()
+    scaler_y = StandardScaler()
+
+    # Fit scalers on training data only
+    X_train_scaled = scaler_X.fit_transform(X_train)
+    y_train_scaled = scaler_y.fit_transform(y_train)
+    
+    # Transform validation data using fitted scalers
+    X_val_scaled = scaler_X.transform(X_val)
+    y_val_scaled = scaler_y.transform(y_val)
+    
+    print(f"Training model for experiment {exp}")
+    print(f"Epochs: {epochs}, Batch size: {batch_size}")
+    print(f"Train samples: {X_train.shape[0]}, Validation samples: {X_val.shape[0]}, Test samples: {X_test.shape[0]}")
+
+    # Define callbacks
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=50,
+        restore_best_weights=True,
+        verbose=1
+    )
+    
+    reduce_lr = ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=25,
+        min_lr=1e-7,
+        verbose=1
+    )
+    
+    # Train the model
+    history = model.fit(
+        X_train_scaled, y_train_scaled,
+        validation_data=(X_val_scaled, y_val_scaled),
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=[early_stopping, reduce_lr],
+        verbose=1
+    )
+    
+    # Save model
+    save_dir = os.path.abspath("trained_models")
+    os.makedirs(save_dir, exist_ok=True)
+    model.save(os.path.join(save_dir, f"model_{exp}.h5"))   
+    print(f"Model saved: model_{exp}.h5\n")
+
+    # Plot training history
+    plt.figure(figsize=(12, 4))
+    
+    # Plot training and validation loss
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title(f'Training and Validation Loss - {exp}')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot learning rate if available
+    plt.subplot(1, 2, 2)
+    if 'lr' in history.history:
+        plt.plot(history.history['lr'])
+        plt.xlabel('Epochs')
+        plt.ylabel('Learning Rate')
+        plt.title(f'Learning Rate - {exp}')
+        plt.yscale('log')
+        plt.grid(True, alpha=0.3)
+    else:
+        plt.text(0.5, 0.5, 'Learning Rate\nNot Available', 
+                horizontalalignment='center', verticalalignment='center',
+                transform=plt.gca().transAxes, fontsize=12)
+        plt.title(f'Learning Rate - {exp}')
+    
+    plt.tight_layout()
+    
+    plot_dir = os.path.abspath("training_plots")
+    os.makedirs(plot_dir, exist_ok=True)
+    plt.savefig(os.path.join(plot_dir, f"training_history_{exp}.png"), dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close()
+    print(f"Training history plot saved: training_history_{exp}.png\n")
+
+    # Also evaluate on validation set for comparison
+    train_metrics = evaluate_model(model, X_train, y_train, scaler_X, scaler_y, exp, "training")
+    
+    # Also evaluate on validation set for comparison
+    val_metrics = evaluate_model(model, X_val, y_val, scaler_X, scaler_y, exp, "validation")
+    
+    # Evaluate model on test set
+    test_metrics = evaluate_model(model, X_test, y_test, scaler_X, scaler_y, exp, "test")
+    
+    return model, history, test_metrics
+
+# %% [markdown]
+# ### Global parameters
+
+# %%
+travel_speed = [200,400,600,800,1000]  # in mm/min    # actual
+
+wire_feed_rate = [2,4, 6, 8, 10] # in m/min   # actual
+
+doe = [(v_r, v_w) for v_r in travel_speed for v_w in wire_feed_rate]
+doe_str = [f"{v_r}_{v_w}" for v_r in travel_speed for v_w in wire_feed_rate]
+
+# %%
+training_parameters = {
+    'epochs': 50,  # Increased since we have early stopping
+    'batch_size': 2048,  
+    'learning_rate': 0.0001,
+    'early_stopping_patience': 50,  # Stop if validation loss doesn't improve for 50 epochs
+    'lr_reduce_patience': 25  # Reduce learning rate if no improvement for 25 epochs
+}
+
+
+
+
+
+# %% [markdown]
+# ### Main code
+
+
+# %%
+# Store results for analysis
+all_test_metrics = []
+all_val_metrics = []
+
+for i, exp in enumerate(doe_str):
+    print(f"\n=== Experiment {i+1}/{len(doe_str)}: {exp} ===")
+    
+    # Load data for the experiment
+    X, y = load_data_for_experiment(exp)
+    print(f"Loaded data shape: X={X.shape}, y={y.shape}")
+
+    df_exp = pl.DataFrame({
+        "time": X[:,0],
+        "x": X[:,1],
+        "y": X[:,2],
+        "z": X[:,3],
+        "Temp_K": y.flatten(),
+
+    })
+    
+    # Split data by time steps
+    X_train, X_val, X_test, y_train, y_val, y_test = split_random(X,y, test_fraction = 0.1, val_fraction = 0.2, random_state = 42)
+        
+    
+    
+    # Create model
+    model = create_model(
+        input_dim=X.shape[1], 
+        learning_rate=training_parameters['learning_rate']
+    )
+    
+    # Train and evaluate model
+    model, history, test_metrics = train_and_save_model(
+        model, X_train, X_val, X_test, y_train, y_val, y_test, exp, training_parameters
+    )
+    
+    # Store metrics for later analysis
+    test_metrics['experiment'] = exp
+    all_test_metrics.append(test_metrics)
+    
+    print(f"Completed experiment {exp}")
+    print("-" * 50)
+
+print(f"\n=== Training Complete ===")
+print(f"Trained {len(doe_str)} models successfully!")
+print("All models saved in 'trained_models/' directory")
+print("Evaluation metrics saved in 'evaluation_results/' directory")
+print("Training plots saved in 'training_plots/' directory")
+
+# %%
+# Analyze results across all experiments
+if all_test_metrics:
+    results_df = pd.DataFrame(all_test_metrics)
+    
+    print("=== Summary of Test Results Across All Experiments ===")
+    print(f"Average RMSE: {results_df['RMSE'].mean():.4f} ± {results_df['RMSE'].std():.4f}")
+    print(f"Average MAE: {results_df['MAE'].mean():.4f} ± {results_df['MAE'].std():.4f}")
+    print(f"Average R²: {results_df['R2'].mean():.4f} ± {results_df['R2'].std():.4f}")
+    print(f"Average Pearson Correlation: {results_df['Pearson_Correlation'].mean():.4f} ± {results_df['Pearson_Correlation'].std():.4f}")
+    
+    # Find best and worst performing experiments
+    best_r2_idx = results_df['R2'].idxmax()
+    worst_r2_idx = results_df['R2'].idxmin()
+    
+    print(f"\nBest performing experiment (highest R²): {results_df.loc[best_r2_idx, 'experiment']} (R² = {results_df.loc[best_r2_idx, 'R2']:.4f})")
+    print(f"Worst performing experiment (lowest R²): {results_df.loc[worst_r2_idx, 'experiment']} (R² = {results_df.loc[worst_r2_idx, 'R2']:.4f})")
+    
+    # Save summary results
+    results_df.to_csv('evaluation_results/all_experiments_test_summary.csv', index=False)
+    print(f"\nSummary results saved to 'evaluation_results/all_experiments_test_summary.csv'")
+    
+    # Create summary plots
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    
+    axes[0, 0].hist(results_df['RMSE'], bins=10, alpha=0.7, edgecolor='black')
+    axes[0, 0].set_title('Distribution of RMSE')
+    axes[0, 0].set_xlabel('RMSE')
+    axes[0, 0].set_ylabel('Count')
+    
+    axes[0, 1].hist(results_df['MAE'], bins=10, alpha=0.7, edgecolor='black')
+    axes[0, 1].set_title('Distribution of MAE')
+    axes[0, 1].set_xlabel('MAE')
+    axes[0, 1].set_ylabel('Count')
+    
+    axes[1, 0].hist(results_df['R2'], bins=10, alpha=0.7, edgecolor='black')
+    axes[1, 0].set_title('Distribution of R²')
+    axes[1, 0].set_xlabel('R²')
+    axes[1, 0].set_ylabel('Count')
+    
+    axes[1, 1].hist(results_df['Pearson_Correlation'], bins=10, alpha=0.7, edgecolor='black')
+    axes[1, 1].set_title('Distribution of Pearson Correlation')
+    axes[1, 1].set_xlabel('Pearson Correlation')
+    axes[1, 1].set_ylabel('Count')
+    
+    plt.tight_layout()
+    plt.savefig('evaluation_results/metrics_distribution_summary.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    plt.close()
+    
+    print("Metrics distribution plots saved to 'evaluation_results/metrics_distribution_summary.png'")
+else:
+    print("No test metrics available. Please run the training loop first.")
+
+
+
