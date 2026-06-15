@@ -206,11 +206,9 @@ ________________________________________________________________________________
 
 plot_temp_vs_time_per_doe_test_NN.py
 
-This script generates the predicted and original temperature-versus-time plots for the test dataset of all 25 DOE cases.
+This python script is created for producing the neural network predicted and actual temperature-versus-time plots for the test dataset of all 25 DOE cases.
 
-The generated plots are saved in:
-
-evaluation_plots_temp_time_test_perDOE/
+The generated  temp. vs time plots for all DOE are saved in the folder named: evaluation_plots_temp_time_test_perDOE which contains the temp_vs_time plots in .png file format for all 25 DOE. For example temp_vs_time_200_2.png includes two curves :original temperature curve is shown in blue colour, and NN_predicted curve is shown by the orange dashed line.   
 
 
 
