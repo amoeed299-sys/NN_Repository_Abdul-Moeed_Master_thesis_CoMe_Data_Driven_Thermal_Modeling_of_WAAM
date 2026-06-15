@@ -15,7 +15,9 @@ ________________________________________________________________________________
 5. Generate training, validation losses plots , scatter plots, NN_predicted-verses-actual temperature-time plots for all 25 Experiments.
 ________________________________________________________________________________________________________________________________________
 Now we will go through project structure. NN_WAAM_ALL is a main big folder containing everthing related to the NN_WAAM, such as data files, main python code for Neural Network model training, trained models, evaluation plots, training plots, evaluation results, python file for NN_predicted and original temperature vs time plots (for all 25 DOE), temperature-verses-time plots for test set for all 25 DOE. 
+
 NN_WAAM_ALL/
+
 │
 ├── data/
 │   └── pre_processed/
