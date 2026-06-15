@@ -144,7 +144,51 @@ This is the main python script developed for Nueral Network model training.
 
 * Saves the predicted-versus-actual plots inside the `evaluation_plots/` folder.
 
-________________________________________
+___________________________________________________________________________________________________________________________
+
+**Trained Models**
+
+trained_models 
+
+This folder contains the 25 trained neural-network models saved in .h5 format.
+
+For instance:
+
+model_200_2.h5
+
+model_400_4.h5
+
+model_600_6.h5
+
+model_800_8.h5
+
+model_1000_10.h5
+
+Each model corresponds to one DOE Parquet file.
+____________________________________________________________________________________________________________________________
+
+**Training Plots**
+
+training_plots
+
+The training_plots folder have training and validation loss curves in .png format for all 25 DOE models.
+For example:
+
+training_history_200_2.png
+
+training_history_400_4.png
+
+These curves are used to check convergence of models.
+____________________________________________________________________________________________________________________________
+
+**Predicted-Versus-Actual Plots (Scatter plots)**
+
+evaluation_plots
+
+This folder contains predicted-versus-actual temperature plots for the:	training set, validation,	test set. 
+The scatter plots illustrate how closely the neural-network predictions match the original temperatures results obtained from Simufact Welding. The original temperature line is at 45 degrees angle and predictions by the model are shown in blue colour around the red original temperature line. The test-dataset scatter plots are important here as these are the predictions made by model on an unseen data after training.
+____________________________________________________________________________________________________________________________
+
 
 
 
