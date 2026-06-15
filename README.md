@@ -87,7 +87,7 @@ surrogate_NN_model_training_25_DOE_maincode.py
 
 This is the main python script developed for Nueral Network model training.
 
-### Main Steps Performed by the Script
+## Important Steps Performed by the Script
 
 * Loads each DOE dataset from `data/pre_processed/` in Parquet format using Polars.
 
@@ -99,11 +99,9 @@ This is the main python script developed for Nueral Network model training.
   * `z`
   * `Temp_K`
 
-* Uses `time`, `x`, `y`, and `z` as the neural-network input features and `Temp_K` as the target variable.
+* Uses `time`, `x`, `y`, and `z` as the neural-network input features (covariates) and `Temp_K` as the target variable (dependent variable)
 
-* Provides an optional 3D voxel-downsampling function for reducing large spatial datasets.
-
-* Randomly divides each DOE dataset into:
+* Splitting of each DOE dataset into:
 
   * 72% training data
   * 18% validation data
@@ -111,15 +109,15 @@ This is the main python script developed for Nueral Network model training.
 
 * Standardizes the input features and target temperature using `StandardScaler`. The scalers are fitted only on the training data.
 
-* Creates a feed-forward neural network with:
+* Creation of a feed-forward neural network architecture with:
 
-  * Four input features
+  * Four input features (time,x,y,z)
   * Dense layers containing 256, 256, 128, 128, 64, and 64 neurons
   * ReLU activation functions
-  * A dropout layer with a rate of 0.2
-  * One output neuron for temperature prediction
+  * A dropout layer with a rate of 0.2 after the first dense layer
+  * One output neuron for temperature prediction (T).
 
-* Compiles the model using the Adam optimizer and Mean Squared Error loss.
+* Model is compiled using the Adam optimizer and Mean Squared Error loss.
 
 * Trains a separate neural-network model for every selected DOE case using:
 
@@ -129,7 +127,7 @@ This is the main python script developed for Nueral Network model training.
   * Early stopping
   * Automatic learning-rate reduction
 
-* Saves every trained model in `.h5` format inside the `trained_models/` folder.
+* Saves each trained model in `.h5` format inside the `trained_models/` folder.
 
 * Generates training and validation loss plots and saves them in the `training_plots/` folder.
 
@@ -140,27 +138,11 @@ This is the main python script developed for Nueral Network model training.
   * R² score
   * Pearson correlation coefficient
 
-* Saves the evaluation metrics as CSV files inside the `evaluation_results/` folder.
+* Saves the evaluation metrics (RMSE,MAE,R^2,Pearson Correlation) as CSV files inside the `evaluation_results/` folder. Here, we have 3 CSV files for training, validation, and test datasets. But the most significant file is model_evaluation_metrics_test.csv which stores metrics values for all 25 DOE.
 
-* Creates predicted-versus-actual temperature plots for the training, validation, and test datasets.
+* Creates predicted-versus-actual temperature scatter plots for the training, validation, and test datasets. But plots for test datasets are important. 
 
 * Saves the predicted-versus-actual plots inside the `evaluation_plots/` folder.
-
-* Produces a summary of the test results across all processed DOE cases.
-
-* Identifies the best- and worst-performing models based on the test-set R² score.
-
-* Saves the combined test results as:
-
-  ```text
-  evaluation_results/all_experiments_test_summary.csv
-  ```
-
-* Generates distribution plots for RMSE, MAE, R², and Pearson correlation and saves them as:
-
-  ```text
-  evaluation_results/metrics_distribution_summary.png
-  ```
 
 ________________________________________
 
