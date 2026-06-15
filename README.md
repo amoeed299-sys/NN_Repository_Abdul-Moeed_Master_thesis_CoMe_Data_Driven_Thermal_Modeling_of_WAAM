@@ -19,19 +19,54 @@ Now we will go through project structure. NN_WAAM_ALL is a main big folder conta
 NN_WAAM_ALL/
 
 │
+
 ├── data/
+
 │   └── pre_processed/
+
 │
+
 ├── evaluation_plots/
+
 ├── evaluation_plots_temp_time_test_perDOE/
+
 ├── evaluation_results/
+
 ├── trained_models/
+
 ├── training_plots/
-│
+
+
+
 ├── surrogate_NN_model_training_25_DOE_maincode.py
+
 ├── plot_temp_vs_time_per_doe_test_NN.py
+
 └── README.md
-________________________________________
+________________________________________________________________________________________________________________________________________
+**Design of Experiments**
+
+A Design of Experiments approach was employed to generate the simulation dataset in this study. In
+total, 25 experiments were designed using combinations of five different robot travel speeds and five
+distinct wire feed rates. The robot travel speed was varied from 200 to 1000mm/min in increments of
+200mm/min (200,400,600,800,1000), while the wire feed rate was varied from 2 to 10m/min in
+increments of 2m/min (2,4,6,8,10). Each experiment was identified using the notation robot travel
+speed_wire feed rate. For example, in experiment designated with 600_8, 600 represents
+the robot travel speed in mm/min, and 8 represents the wire feed rate in m/min.
+
+________________________________________________________________________________________________________________________________________
+**Data**
+
+data/pre_processed
+This folder contains the preprocessed datasets for all 25 DOE simulations.
+Each DOE is stored as a separate Parquet file, for example: 
+200_2.parquet
+200_4.parquet
+200_6.parquet
+400_2.parquet
+600_4.parquet
+These (25) files contain the simulation data used for neural-network model training, validation, and testing.
+
 
 
 
