@@ -60,12 +60,28 @@ ________________________________________________________________________________
 data/pre_processed
 This folder contains the preprocessed datasets for all 25 DOE simulations.
 Each DOE is stored as a separate Parquet file, for example: 
+
 200_2.parquet
+
 200_4.parquet
+
 200_6.parquet
+
 400_2.parquet
+
 600_4.parquet
+
+800_8.parquet
+
+1000_6.parquet
+
 These (25) files contain the simulation data used for neural-network model training, validation, and testing.
+
+Each parquet file contains column wise information  for each experiment incluidng time, nodal coordinates (x,y,z), and temperature at each node in Kelvin. 
+
+structure:  Node_ID, time, x, y, z, Temp_K
+
+
 
 
 
