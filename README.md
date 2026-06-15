@@ -79,7 +79,91 @@ These (25) files contain the simulation data used for neural-network model train
 
 Each parquet file contains column wise information  for each experiment incluidng time, nodal coordinates (x,y,z), and temperature at each node in Kelvin. 
 
-structure:  Node_ID, time, x, y, z, Temp_K
+structure of each parquet file:  Node_ID, time, x, y, z, Temp_K
+
+**Main Training Script-Python code**
+
+surrogate_NN_model_training_25_DOE_maincode.py
+
+This is the main python script developed for Nueral Network model training.
+
+### Main Steps Performed by the Script
+
+* Loads each DOE dataset from `data/pre_processed/` in Parquet format using Polars.
+
+* Verifies that every dataset contains the required columns:
+
+  * `time`
+  * `x`
+  * `y`
+  * `z`
+  * `Temp_K`
+
+* Uses `time`, `x`, `y`, and `z` as the neural-network input features and `Temp_K` as the target variable.
+
+* Provides an optional 3D voxel-downsampling function for reducing large spatial datasets.
+
+* Randomly divides each DOE dataset into:
+
+  * 72% training data
+  * 18% validation data
+  * 10% test data
+
+* Standardizes the input features and target temperature using `StandardScaler`. The scalers are fitted only on the training data.
+
+* Creates a feed-forward neural network with:
+
+  * Four input features
+  * Dense layers containing 256, 256, 128, 128, 64, and 64 neurons
+  * ReLU activation functions
+  * A dropout layer with a rate of 0.2
+  * One output neuron for temperature prediction
+
+* Compiles the model using the Adam optimizer and Mean Squared Error loss.
+
+* Trains a separate neural-network model for every selected DOE case using:
+
+  * Maximum of 50 epochs
+  * Batch size of 2048
+  * Learning rate of 0.0001
+  * Early stopping
+  * Automatic learning-rate reduction
+
+* Saves every trained model in `.h5` format inside the `trained_models/` folder.
+
+* Generates training and validation loss plots and saves them in the `training_plots/` folder.
+
+* Evaluates every model on the training, validation, and test datasets using:
+
+  * RMSE
+  * MAE
+  * R² score
+  * Pearson correlation coefficient
+
+* Saves the evaluation metrics as CSV files inside the `evaluation_results/` folder.
+
+* Creates predicted-versus-actual temperature plots for the training, validation, and test datasets.
+
+* Saves the predicted-versus-actual plots inside the `evaluation_plots/` folder.
+
+* Produces a summary of the test results across all processed DOE cases.
+
+* Identifies the best- and worst-performing models based on the test-set R² score.
+
+* Saves the combined test results as:
+
+  ```text
+  evaluation_results/all_experiments_test_summary.csv
+  ```
+
+* Generates distribution plots for RMSE, MAE, R², and Pearson correlation and saves them as:
+
+  ```text
+  evaluation_results/metrics_distribution_summary.png
+  ```
+
+________________________________________
+
 
 
 
