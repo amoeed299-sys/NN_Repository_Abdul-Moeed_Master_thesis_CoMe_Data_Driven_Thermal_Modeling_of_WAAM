@@ -189,6 +189,29 @@ This folder contains predicted-versus-actual temperature plots for the:	training
 The scatter plots illustrate how closely the neural-network predictions match the original temperatures results obtained from Simufact Welding. The original temperature line is at 45 degrees angle and predictions by the model are shown in blue colour around the red original temperature line. The test-dataset scatter plots are important here as these are the predictions made by model on an unseen data after training.
 ____________________________________________________________________________________________________________________________
 
+**Evaluation Results**
+
+evaluation_results
+
+This folder includes the performance metrics for the model for all DOE cases.The main relevant metrics are:	Root Mean Squared Error (RMSE),	Mean Absolute Error (MAR), 	Coefficient of Determination (R^2).
+
+The important file in the folder is:
+
+model_evaluation_metrics_test.csv
+
+This file stores the RMSE, MAE, and R² and Pearson Correlation scores for all 25 (DOE) models for test-set. 
+____________________________________________________________________________________________________________________________
+
+**Temperature vs time Plotting Script**
+
+plot_temp_vs_time_per_doe_test_NN.py
+
+This script generates the predicted and original temperature-versus-time plots for the test dataset of all 25 DOE cases.
+
+The generated plots are saved in:
+
+evaluation_plots_temp_time_test_perDOE/
+
 
 
 
