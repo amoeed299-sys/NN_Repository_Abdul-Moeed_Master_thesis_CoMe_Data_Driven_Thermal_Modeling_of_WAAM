@@ -216,6 +216,24 @@ ________________________________________________________________________________
 
 To run the project, it is compulsory to have all the 25 parquet files in data/pre_processed folder. Firstly, we execute surrogate_NN_model_training_25_DOE_maincode.py file. After model training and evaluation, the second pyhton script named plot_temp_vs_time_per_doe_test_NN.py is executed to generate plots comparing the neural network predicted temperatures with the original temperature (obtained from Simufact Welding) evolution over time. 
 
+________________________________________________________________________________________________________________________________________
+
+**Project key Outputs**
+
+The project produces following important results for each DOE:
+
+1.  One trained neural network model (in .h5 format).
+2.  One training and validation loss plot.
+3.  Training, validation, and test prediction scatter plots.
+4.  RMSE, MAE, and R^2 scores (evaluation results).
+5.  Test-set temperature-verses-time comparison plot (NN_predicted vs Original temperature vs time plots).
+
+________________________________________________________________________________________________________________________________________
+
+**Author**
+
+Abdul Moeed_M.Sc. Computational Mechanics (@TUM)
+
 
 
 
