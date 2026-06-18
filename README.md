@@ -210,6 +210,13 @@ This python script is created for producing the neural network predicted and act
 
 The generated  temp. vs time plots for all DOE are saved in the folder named: evaluation_plots_temp_time_test_perDOE which contains the temp_vs_time plots in .png file format for all 25 DOE. For example temp_vs_time_200_2.png includes two curves :original temperature curve is shown in blue colour, and NN_predicted curve is shown by the orange dashed line. We can compare the neural network predictions with simulated tenperature evolution during the heating and cooling phases through these plots. 
 
+________________________________________________________________________________________________________________________________________
+
+**Project Execution**
+
+To run the project, it is compulsory to have all the 25 parquet files in data/pre_processed folder. Firstly, we execute surrogate_NN_model_training_25_DOE_maincode.py file. After model training and evaluation, the second pyhton script named plot_temp_vs_time_per_doe_test_NN.py is executed to generate plots comparing the neural network predicted temperatures with the original temperature (obtained from Simufact Welding) evolution over time. 
+
+
 
 
 
