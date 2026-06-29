@@ -4,16 +4,17 @@ ________________________________________________________________________________
 **Overview**
 
 This file contains neural-network surrogate modelling work developed for a master-thesis on data-driven thermal modeling of Wire Arc Additive Manufacturing process.  
-The input data for NN model training is obtained from *Simufact Welding 2022 software* where author performed 25 Finite Element Simulations by creating 25 Design of Experiments. The data coming from each simulation is stored in the Parquet file format. The developed NN model is trained 25 times (for all 25 DOE cases). 
-________________________________________________________________________________________________________________________________________
+The input data for NN model training is obtained from *Simufact Welding 2022 software* where author performed 25 Finite Element Simulations by creating 25 Design of Experiments. The data coming from each simulation is stored in the Parquet file format. The developed NN model is trained 25 times (25 DOE). 
+____________________________________________________________________________________________________________________________
 **Project Workflow**
 
 1. Load the pre_processed files in the parquet file format (Simulation data).
 2. Train the Neural Network model for each DOE case.
-3. Save the 25 trained models in .h5 file format.
+3. Save 25 trained models in .h5 file format.
 4. Evaluate each model using Root Mean Squared Error (RMSE) , Mean Absolute Error (MAE), and coefficient of determination (R^2).
 5. Generate training, validation losses plots , scatter plots, NN_predicted-verses-actual temperature-time plots for all 25 Experiments.
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
+
 Now we will go through project structure. NN_WAAM_ALL is a main big folder containing everthing related to the NN_WAAM, such as data files, main python code for Neural Network model training, trained models, evaluation plots, training plots, evaluation results, python file for NN_predicted and original temperature vs time plots (for all 25 DOE), temperature-verses-time plots for test set for all 25 DOE. 
 
 NN_WAAM_ALL/
@@ -43,7 +44,8 @@ NN_WAAM_ALL/
 ├── plot_temp_vs_time_per_doe_test_NN.py
 
 └── README.md
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
+
 **Design of Experiments**
 
 A Design of Experiments approach was employed to generate the simulation dataset in this study. In
@@ -54,7 +56,8 @@ increments of 2m/min (2,4,6,8,10). Each experiment was identified using the nota
 speed_wire feed rate. For example, in experiment designated with 600_8, 600 represents
 the robot travel speed in mm/min, and 8 represents the wire feed rate in m/min.
 
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
+
 **Data**
 
 data/pre_processed
@@ -138,7 +141,7 @@ This is the main python script developed for Nueral Network model training.
   * R² score
   * Pearson correlation coefficient
 
-* Saves the evaluation metrics (RMSE,MAE,R^2,Pearson Correlation) as CSV files inside the `evaluation_results/` folder. Here, we have 3 CSV files for training, validation, and test datasets. But the most significant file is model_evaluation_metrics_test.csv which stores metrics values for all 25 DOE.
+* Saves the evaluation metrics (RMSE,MAE,R^2,Pearson Correlation) as CSV files inside the `evaluation_results/` folder. Here, we have 3 CSV files for training, validation, and test datasets. But the most relevant file is the model_evaluation_metrics_test.csv which stores metrics values for all 25 DOE.
 
 * Creates predicted-versus-actual temperature scatter plots for the training, validation, and test datasets. But plots for test datasets are important. 
 
@@ -186,14 +189,14 @@ ________________________________________________________________________________
 evaluation_plots
 
 This folder contains predicted-versus-actual temperature plots for the:	training set, validation,	test set. 
-The scatter plots illustrate how closely the neural-network predictions match the original temperatures results obtained from Simufact Welding. The original temperature line is at 45 degrees angle and predictions by the model are shown in blue colour around the red original temperature line. The test-dataset scatter plots are important here as these are the predictions made by model on an unseen data after training.
+The scatter plots illustrate how closely the neural-network predictions match the original temperature results obtained from Simufact Welding. The original temperature line is at 45 degrees angle and predictions by the model are shown in blue colour around the red original temperature line. The test-dataset scatter plots are important here as these are the predictions made by model on an unseen data after training.
 ____________________________________________________________________________________________________________________________
 
 **Evaluation Results**
 
 evaluation_results
 
-This folder includes the performance metrics for the model for all DOE cases.The main relevant metrics are:	Root Mean Squared Error (RMSE),	Mean Absolute Error (MAR), 	Coefficient of Determination (R^2).
+This folder includes the performance metrics for the model for all DOE cases. The main relevant metrics are:	Root Mean Squared Error (RMSE),	Mean Absolute Error (MAR), 	Coefficient of Determination (R^2).
 
 The important file in the folder is:
 
@@ -206,17 +209,17 @@ ________________________________________________________________________________
 
 plot_temp_vs_time_per_doe_test_NN.py
 
-This python script is created for producing the neural network predicted and actual temperature-versus-time plots for the test dataset of all 25 DOE cases.
+This python script is created for producing the neural network predicted and actual temperature-versus-time plots for the test dataset for all 25 DOE cases.
 
-The generated  temp. vs time plots for all DOE are saved in the folder named: evaluation_plots_temp_time_test_perDOE which contains the temp_vs_time plots in .png file format for all 25 DOE. For example temp_vs_time_200_2.png includes two curves :original temperature curve is shown in blue colour, and NN_predicted curve is shown by the orange dashed line. We can compare the neural network predictions with simulated tenperature evolution during the heating and cooling phases through these plots. 
+The generated  temperature vs time plots for all DOE are saved in the folder named: evaluation_plots_temp_time_test_perDOE which contains the temp_vs_time plots in .png file format for all 25 DOE. For example temp_vs_time_200_2.png includes two curves :original temperature curve is shown in blue colour, and NN_predicted curve is shown by the orange dashed line. We can compare the neural network predictions with simulated tenperature evolution during the heating and cooling phases through these plots. 
 
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
 
 **Project Execution**
 
 To run the project, it is compulsory to have all the 25 parquet files in data/pre_processed folder. Firstly, we execute surrogate_NN_model_training_25_DOE_maincode.py file. After model training and evaluation, the second pyhton script named plot_temp_vs_time_per_doe_test_NN.py is executed to generate plots comparing the neural network predicted temperatures with the original temperature (obtained from Simufact Welding) evolution over time. 
 
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
 
 **Project key Outputs**
 
@@ -226,9 +229,13 @@ The project produces following important results for each DOE:
 2.  One training and validation loss plot.
 3.  Training, validation, and test prediction scatter plots.
 4.  RMSE, MAE, and R^2 scores (evaluation results).
-5.  Test-set temperature-verses-time comparison plot (NN_predicted vs Original temperature vs time plots).
+5.  Test-set temperature-verses-time comparison plot (NN_predicted vs Original temperature-time plots).
 
-________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________
+
+**Project** 
+
+Master’s thesis — Data-Driven Thermal Modeling of Wire Arc Additive Manufacturing Process
 
 **Author**
 
